@@ -1,5 +1,7 @@
 import bcryptjs from 'bcryptjs';
 import { envVars } from '../config/env.js';
+import { Role } from '../moduels/user/user.interface.js';
+import { User } from '../moduels/user/user.model.js';
 
 export const sendSuperAdmin = async () => {
     try {
