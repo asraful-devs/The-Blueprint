@@ -69,3 +69,8 @@ export const updateUserZodSchema = z.object({
     isActive: isActiveSchema.optional(),
     isDeleted: isDeletedSchema.optional(),
 });
+
+export const UserValidation = {
+    createUserValidationSchema: createUserZodSchema,
+    updateUserValidationSchema: updateUserZodSchema,
+};

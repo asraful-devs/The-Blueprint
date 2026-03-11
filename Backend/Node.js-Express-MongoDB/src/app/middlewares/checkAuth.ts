@@ -5,6 +5,7 @@ import { envVars } from '../config/env.js';
 import ApiError from '../error/ApiError.js';
 import { IsActive } from '../moduels/user/user.interface.js';
 import { User } from '../moduels/user/user.model.js';
+import { verifyToken } from '../utils/jwt.js';
 
 export const checkAuth =
     (...authRoles: string[]) =>
