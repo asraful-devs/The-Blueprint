@@ -1,17 +1,25 @@
-import { Router } from 'express';
+import express from 'express';
 import { checkAuth } from '../../middlewares/checkAuth.js';
 import { Role } from '../user/user.interface.js';
 import { AuthControllers } from './auth.controller.js';
 
-const router = Router();
+const router = express.Router();
 
-router.post('/login', AuthControllers.credentialsLogin);
-router.post('/refresh-token', AuthControllers.getNewAccessToken);
-router.post('/logout', AuthControllers.logout);
+// Public
+router.post('/login', AuthControllers.loginUser);
+router.post('/refresh-token', AuthControllers.refreshToken);
+
+// Protected
 router.post(
-    '/reset-password',
-    checkAuth(...Object.values(Role)),
-    AuthControllers.resetPassword
+    '/change-password',
+    checkAuth(Role.ADMIN, Role.SUPER_ADMIN, Role.USER),
+    AuthControllers.changePassword
+);
+
+router.post(
+    '/logout',
+    checkAuth(Role.ADMIN, Role.SUPER_ADMIN, Role.USER),
+    AuthControllers.logoutUser
 );
 
 export const AuthRoutes = router;

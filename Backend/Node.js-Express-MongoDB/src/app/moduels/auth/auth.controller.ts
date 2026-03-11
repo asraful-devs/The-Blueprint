@@ -1,152 +1,76 @@
-import { NextFunction, Request, Response } from 'express';
 import httpStatus from 'http-status-codes';
-import { JwtPayload } from 'jsonwebtoken';
-import passport from 'passport';
-import AppError from '../../errorHelpers/AppError';
-import catchAsync from '../../utils/catchAsync';
-import sendResponse from '../../utils/sendResponse';
-import { setAuthCookies } from '../../utils/setCookies';
-import { createUserTokens } from '../../utils/userTokens';
-import { AuthServices } from './auth.service';
 
-// using local way
-// const credentialsLogin = catchAsync(
-//     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-//     async (req: Request, res: Response, next: NextFunction) => {
-//         const loginInfo = await AuthServices.credentialsLogin(req.body);
+import { envVars } from '../../config/env.js';
+import catchAsync from '../../utils/catchAsync.js';
+import sendResponse from '../../utils/sendResponse.js';
+import { AuthServices } from './auth.service.js';
 
-//         setAuthCookies(res, loginInfo);
+// Login
+const loginUser = catchAsync(async (req, res) => {
+    const result = await AuthServices.loginUser(req.body);
 
-//         sendResponse(res, {
-//             success: true,
-//             statusCode: httpStatus.OK,
-//             message: 'User login  Successfully',
-//             data: loginInfo,
-//         });
-//     }
-// );
+    // set refresh token in cookie
+    res.cookie('refreshToken', result.refreshToken, {
+        secure: envVars.NODE_ENV === 'production',
+        httpOnly: true,
+        sameSite: 'none',
+        maxAge: 1000 * 60 * 60 * 24 * 365, // 1 year
+    });
 
-// using passport local way
-const credentialsLogin = catchAsync(
-    async (req: Request, res: Response, next: NextFunction) => {
-        passport.authenticate(
-            'local',
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            async (error: any, user: any, info: any) => {
-                if (error) {
-                    return next(new AppError(401, error));
-                }
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        success: true,
+        message: 'User logged in successfully',
+        data: {
+            accessToken: result.accessToken,
+        },
+    });
+});
 
-                if (!user) {
-                    return next(new AppError(401, info.message));
-                }
+// Refresh Token
+const refreshToken = catchAsync(async (req, res) => {
+    const { refreshToken } = req.cookies;
+    const result = await AuthServices.refreshToken(refreshToken);
 
-                const userToken = await createUserTokens(user);
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        success: true,
+        message: 'Access token retrieved successfully',
+        data: result,
+    });
+});
 
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { password, ...rest } = user.toObject();
+// Change Password
+const changePassword = catchAsync(async (req, res) => {
+    const result = await AuthServices.changePassword(req.user._id, req.body);
 
-                setAuthCookies(res, userToken);
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        success: true,
+        message: 'Password changed successfully',
+        data: result,
+    });
+});
 
-                sendResponse(res, {
-                    success: true,
-                    statusCode: httpStatus.OK,
-                    message: 'User login  Successfully',
-                    data: {
-                        accessToken: userToken.accessToken,
-                        refreshToken: userToken.refreshToken,
-                        user: rest,
-                    },
-                });
-            }
-        )(req, res, next);
-    }
-);
+// Logout
+const logoutUser = catchAsync(async (req, res) => {
+    res.clearCookie('refreshToken', {
+        secure: envVars.NODE_ENV === 'production',
+        httpOnly: true,
+        sameSite: 'none',
+    });
 
-const getNewAccessToken = catchAsync(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    async (req: Request, res: Response, next: NextFunction) => {
-        const refreshToken = req.cookies.refreshToken;
-
-        if (!refreshToken) {
-            throw new AppError(
-                httpStatus.BAD_REQUEST,
-                'No refresh Token is resived cookies.'
-            );
-        }
-
-        const tokenInfo = await AuthServices.getNewAccessToken(refreshToken);
-
-        setAuthCookies(res, tokenInfo);
-
-        sendResponse(res, {
-            success: true,
-            statusCode: httpStatus.OK,
-            message: 'New Access token Retrived Successfully',
-            data: tokenInfo,
-        });
-    }
-);
-
-const logout = catchAsync(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    async (req: Request, res: Response, next: NextFunction) => {
-        res.clearCookie('accessToken', {
-            httpOnly: true,
-            secure: false,
-            sameSite: 'lax',
-        });
-        res.clearCookie('refreshToken', {
-            httpOnly: true,
-            secure: false,
-            sameSite: 'lax',
-        });
-
-        sendResponse(res, {
-            success: true,
-            statusCode: httpStatus.OK,
-            message: 'User logout  Successfully',
-            data: null,
-        });
-    }
-);
-
-const resetPassword = catchAsync(
-    async (
-        req: Request & { user?: JwtPayload },
-        res: Response,
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        next: NextFunction
-    ) => {
-        const oldPassword = req.body.oldPassword;
-        const newPassword = req.body.newPassword;
-        const decodedToken = req.user;
-
-        if (!decodedToken) {
-            throw new AppError(
-                httpStatus.UNAUTHORIZED,
-                'User token is missing or invalid.'
-            );
-        }
-
-        await AuthServices.resetPassword(
-            oldPassword,
-            newPassword,
-            decodedToken
-        );
-
-        sendResponse(res, {
-            success: true,
-            statusCode: httpStatus.OK,
-            message: 'User Password Change  Successfully',
-            data: null,
-        });
-    }
-);
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        success: true,
+        message: 'User logged out successfully',
+        data: null,
+    });
+});
 
 export const AuthControllers = {
-    credentialsLogin,
-    getNewAccessToken,
-    logout,
-    resetPassword,
+    loginUser,
+    refreshToken,
+    changePassword,
+    logoutUser,
 };

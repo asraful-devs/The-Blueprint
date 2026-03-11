@@ -1,10 +1,10 @@
 import httpStatus from 'http-status-codes';
 import { JwtPayload } from 'jsonwebtoken';
-import { envVars } from '../config/env';
-import AppError from '../errorHelpers/AppError';
-import { IsActive, IUser } from '../modules/user/user.interface';
-import { User } from '../modules/user/user.model';
-import { generateToken, verifyToken } from './jwt';
+import { envVars } from '../config/env.js';
+import ApiError from '../error/ApiError.js';
+import { IsActive, IUser } from '../moduels/user/user.interface.js';
+import { User } from '../moduels/user/user.model.js';
+import { generateToken, verifyToken } from './jwt.js';
 
 export const createUserTokens = (user: Partial<IUser>) => {
     const jwtPayload = {
@@ -31,7 +31,9 @@ export const createUserTokens = (user: Partial<IUser>) => {
     };
 };
 
-export const createNewAccessTokenWithRefreshToken = async (refreshToken) => {
+export const createNewAccessTokenWithRefreshToken = async (
+    refreshToken: string
+) => {
     const verifiedRefreshToken = verifyToken(
         refreshToken,
         envVars.JWT_REFRESH_TOKEN_SECRET
@@ -42,19 +44,19 @@ export const createNewAccessTokenWithRefreshToken = async (refreshToken) => {
     });
 
     if (!isUserExist) {
-        throw new AppError(httpStatus.BAD_REQUEST, 'User does not exist');
+        throw new ApiError(httpStatus.BAD_REQUEST, 'User does not exist');
     }
     if (
         isUserExist.isActive === IsActive.BLOCKED ||
         isUserExist.isActive === IsActive.INACTIVE
     ) {
-        throw new AppError(
+        throw new ApiError(
             httpStatus.BAD_REQUEST,
             `User is ${isUserExist.isActive}`
         );
     }
     if (isUserExist.isDeleted) {
-        throw new AppError(httpStatus.BAD_REQUEST, 'User is deleted');
+        throw new ApiError(httpStatus.BAD_REQUEST, 'User is deleted');
     }
 
     const JwtPayload = {

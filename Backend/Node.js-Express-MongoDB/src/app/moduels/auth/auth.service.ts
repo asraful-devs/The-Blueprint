@@ -1,79 +1,84 @@
 import bcryptjs from 'bcryptjs';
 import httpStatus from 'http-status-codes';
-import { JwtPayload } from 'jsonwebtoken';
-import { envVars } from '../../config/env';
-import AppError from '../../errorHelpers/AppError';
-import { createNewAccessTokenWithRefreshToken } from '../../utils/userTokens';
-import { User } from '../user/user.model';
+import { envVars } from '../../config/env.js';
+import ApiError from '../../error/ApiError.js';
+import { createNewAccessTokenWithRefreshToken } from '../../utils/userTokens.js';
+import { IsActive } from '../user/user.interface.js';
+import { User } from '../user/user.model.js';
+import { TChangePasswordPayload, TLoginPayload } from './auth.interface.js';
 
-// const credentialsLogin = async (payload: Partial<IUser>) => {
-//     const { email, password } = payload;
-//     const isUserExist = await User.findOne({ email });
+const loginUser = async (payload: TLoginPayload) => {
+    const { email, password } = payload;
 
-//     if (!isUserExist) {
-//         throw new AppError(httpStatus.BAD_REQUEST, 'User does not exist');
-//     }
+    const user = await User.findOne({ email });
 
-//     const isPasswordMatched = await bcryptjs.compare(
-//         password as string,
-//         isUserExist.password as string
-//     );
+    if (!user) {
+        throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+    }
 
-//     if (!isPasswordMatched) {
-//         throw new AppError(httpStatus.BAD_REQUEST, 'Incorrect Password');
-//     }
+    if (user.isDeleted) {
+        throw new ApiError(httpStatus.GONE, 'User account has been deleted');
+    }
 
-//     const userToken = createUserTokens(isUserExist);
+    if (user.isActive === IsActive.BLOCKED) {
+        throw new ApiError(httpStatus.FORBIDDEN, 'User account is blocked');
+    }
 
-//     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-//     const { password: pass, ...rest } = isUserExist.toObject();
+    const isPasswordCorrect = await bcryptjs.compare(
+        password,
+        user.password as string
+    );
 
-//     return {
-//         accessToken: userToken.accessToken,
-//         refreshToken: userToken.refreshToken,
-//         user: rest,
-//     };
-// };
+    if (!isPasswordCorrect) {
+        throw new ApiError(httpStatus.UNAUTHORIZED, 'Incorrect password');
+    }
+
+    // Todo: Generate access token and refresh token
+
+    return user;
+};
 
 const getNewAccessToken = async (refreshToken: string) => {
-    const newAccessToken = await createNewAccessTokenWithRefreshToken(
-        refreshToken
-    );
+    const newAccessToken =
+        await createNewAccessTokenWithRefreshToken(refreshToken);
 
     return newAccessToken;
 };
 
-const resetPassword = async (
-    oldPassword: string,
-    newPassword: string,
-    decodedToken: JwtPayload
-) => {
-    const user = await User.findById(decodedToken.userId);
-
-    const isOldPasswordMatch = await bcryptjs.compare(
-        oldPassword,
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        user!.password as string
+// Change Password
+const changePassword = async (id: string, payload: TChangePasswordPayload) => {
+    const user = await User.findOne({ _id: id, isDeleted: false }).select(
+        '+password'
     );
 
-    if (!isOldPasswordMatch) {
-        throw new AppError(
+    if (!user) {
+        throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+    }
+
+    const isPasswordCorrect = await bcryptjs.compare(
+        payload.oldPassword,
+        user.password as string
+    );
+
+    if (!isPasswordCorrect) {
+        throw new ApiError(
             httpStatus.UNAUTHORIZED,
-            'Old Password dose not match'
+            'Old password is incorrect'
         );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    user!.password = await bcryptjs.hash(
-        newPassword,
+    const hashedPassword = await bcryptjs.hash(
+        payload.newPassword as string,
         Number(envVars.BCRYPT_SALT_ROUNDS)
     );
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    user!.save();
+    user.password = hashedPassword;
+    await user.save();
+
+    return null;
 };
 
 export const AuthServices = {
     getNewAccessToken,
-    resetPassword,
+    changePassword,
 };
