@@ -1,4 +1,4 @@
-enum IRole {
+export enum IRole {
     ADMIN = 'ADMIN',
     USER = 'USER',
 }
