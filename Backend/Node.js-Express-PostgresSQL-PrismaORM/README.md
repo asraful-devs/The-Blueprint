@@ -57,3 +57,5 @@ const prisma = new PrismaClient({ adapter });
 export { prisma };
 
 then all express & other code
+
+bun add express @types/express
