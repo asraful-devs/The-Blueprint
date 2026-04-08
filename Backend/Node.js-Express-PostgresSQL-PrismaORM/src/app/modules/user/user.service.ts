@@ -1,36 +1,67 @@
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import type { Request } from 'express';
 import status from 'http-status-codes';
 import { prisma } from '../../../../lib/prisma';
 import config from '../../config';
 import ApiError from '../../error/ApiError';
+import welcomeTemplate from '../../templates/email/welcomeTemplate';
+import nodemailerEmailSender from '../../utils/nodemailer.config';
 
 const createUser = async (req: Request) => {
     const payload = req.body;
+    const transactionId = randomUUID();
 
-    //password hashing
-    const hashPassword = await bcrypt.hash(
-        payload.password,
-        config.bcrypt_salt_rounds
-    );
+    const result = await prisma.$transaction(async (tx) => {
+        //isExisting user check logic here
+        const isExisting = await tx.user.findUnique({
+            where: {
+                email: payload.email,
+            },
+        });
 
-    //isExisting user check logic here
-    const isExisting = await prisma.user.findUnique({
-        where: {
-            email: payload.email,
-        },
-    });
+        if (isExisting) {
+            throw new ApiError(status.CONFLICT, 'User already exists !');
+        }
 
-    if (isExisting) {
-        throw new ApiError(status.CONFLICT, 'User already exists !');
-    }
+        //password hashing
+        const hashPassword = await bcrypt.hash(
+            payload.password,
+            config.bcrypt_salt_rounds
+        );
 
-    //create user logic here
-    const result = await prisma.user.create({
-        data: {
-            ...payload,
-            password: hashPassword,
-        },
+        //create user logic here
+        const createdUser = await tx.user.create({
+            data: {
+                ...payload,
+                password: hashPassword,
+            },
+            select: {
+                id: true,
+                fullName: true,
+                email: true,
+                role: true,
+            },
+        });
+
+        const emailInfo = await nodemailerEmailSender(
+            createdUser.email,
+            'Welcome to The Blueprint',
+            welcomeTemplate(createdUser.fullName, transactionId)
+        );
+
+        if (!emailInfo.messageId) {
+            throw new ApiError(
+                status.INTERNAL_SERVER_ERROR,
+                'Failed to send welcome email !'
+            );
+        }
+
+        return {
+            ...createdUser,
+            transactionId,
+            emailTransactionId: emailInfo.messageId,
+        };
     });
 
     return result;
